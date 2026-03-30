@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>カルテチェックPro 完全版</title>
+
+<style>
+body {font-family:sans-serif; padding:10px; background:#f7f9fc;}
+h2{text-align:center;}
+
+.tab button{
+  padding:10px;
+  margin:3px;
+  border:none;
+  border-radius:10px;
+  background:#dfe6e9;
+}
+
+.card{
+  background:white;
+  padding:12px;
+  margin:10px 0;
+  border-radius:12px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.1);
+}
+
+.high{border-left:6px solid red;}
+.mid{border-left:6px solid orange;}
+.low{border-left:6px solid green;}
+
+input,textarea,select{
+  width:100%;
+  margin:5px 0;
+  padding:10px;
+  border-radius:10px;
+  border:1px solid #ccc;
+}
+
+button{padding:10px;border:none;border-radius:10px;}
+
+.dayBox{
+  display:inline-block;
+  width:48px;
+  margin:2px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>カルテチェックPro</h2>
+
+<div class="tab">
+<button onclick="showTab('daily')">日次</button>
+<button onclick="showTab('monthly')">月次</button>
+<button onclick="showTab('list')">一覧</button>
+<button onclick="showTab('check')">チェック</button>
+<button onclick="showTab('stats')">統計</button>
+</div>
+
+<!-- 日次 -->
+<div id="dailyTab">
+<input id="d_name" placeholder="患者名">
+<input type="date" id="d_date">
+<input id="d_nurse" placeholder="看護師">
+
+<select id="priority">
+<option value="low">通常</option>
+<option value="mid">注意</option>
+<option value="high">緊急</option>
+</select>
+
+<textarea id="d_check" placeholder="チェック項目"></textarea>
+<textarea id="d_progress" placeholder="経過"></textarea>
+
+<label><input type="checkbox" id="d_contacted"> 修正連絡</label>
+<label><input type="checkbox" id="d_confirmed"> 修正確認</label>
+<label><input type="checkbox" id="d_with"> 同行</label>
+
+<textarea id="d_note" placeholder="備考"></textarea>
+
+<button onclick="saveDaily()">保存</button>
+</div>
+
+<!-- 月次 -->
+<div id="monthlyTab" style="display:none">
+<input id="m_name" placeholder="患者名">
+<input type="month" id="m_month">
+<input id="m_nurse" placeholder="看護師">
+
+<label><input type="checkbox" id="m_report">報告書</label>
+<label><input type="checkbox" id="m_bedsore">褥瘡</label>
+<label><input type="checkbox" id="m_plan">計画</label>
+<label><input type="checkbox" id="m_next">次月計画</label>
+
+<button onclick="saveMonthly()">保存</button>
+
+<div id="monthlyList"></div>
+</div>
+
+<!-- 一覧 -->
+<div id="listTab" style="display:none">
+<div id="list"></div>
+</div>
+
+<!-- チェック -->
+<div id="checkTab" style="display:none">
+<input id="c_name" placeholder="患者名">
+<input type="month" id="c_month">
+<button onclick="renderCheck()">表示</button>
+<div id="checkList"></div>
+</div>
+
+<!-- 統計 -->
+<div id="statsTab" style="display:none">
+<div id="stats"></div>
+</div>
+
+<script>
+let dailyData=JSON.parse(localStorage.getItem("dailyData"))||[];
+let monthlyData=JSON.parse(localStorage.getItem("monthlyData"))||[];
+
+// タブ
+function showTab(t){
+  dailyTab.style.display="none";
+  monthlyTab.style.display="none";
+  listTab.style.display="none";
+  checkTab.style.display="none";
+  statsTab.style.display="none";
+
+  if(t==="daily") dailyTab.style.display="block";
+  if(t==="monthly"){monthlyTab.style.display="block"; renderMonthly();}
+  if(t==="list"){listTab.style.display="block"; renderList();}
+  if(t==="check") checkTab.style.display="block";
+  if(t==="stats"){statsTab.style.display="block"; renderStats();}
+}
+
+// 日次保存
+function saveDaily(){
+  let now=new Date();
+
+  let data={
+    id:Date.now(),
+    name:d_name.value,
+    date:d_date.value,
+    nurse:d_nurse.value,
+    priority:priority.value,
+    check:d_check.value,
+    progress:d_progress.value,
+    contacted:d_contacted.checked,
+    confirmed:d_confirmed.checked,
+    with:d_with.checked,
+    note:d_note.value,
+    savedAt:now.toLocaleString()
+  };
+
+  dailyData.push(data);
+  localStorage.setItem("dailyData",JSON.stringify(dailyData));
+
+  // 月チェック自動
+  let day=new Date(d_date.value).getDate();
+  let key=`${d_name.value}_${d_date.value.slice(0,7)}`;
+  let saved=JSON.parse(localStorage.getItem("dayCheck"))||{};
+  if(!saved[key]) saved[key]=[];
+  if(!saved[key].includes(day)) saved[key].push(day);
+  localStorage.setItem("dayCheck",JSON.stringify(saved));
+
+  alert("保存OK");
+}
+
+// 月次保存
+function saveMonthly(){
+  let data={
+    name:m_name.value,
+    month:m_month.value,
+    nurse:m_nurse.value,
+    report:m_report.checked,
+    bedsore:m_bedsore.checked,
+    plan:m_plan.checked,
+    next:m_next.checked
+  };
+
+  monthlyData.push(data);
+  localStorage.setItem("monthlyData",JSON.stringify(monthlyData));
+  renderMonthly();
+}
+
+// 月次表示
+function renderMonthly(){
+  let html="";
+  monthlyData.forEach(m=>{
+    html+=`
+    <div class="card">
+    ${m.name} (${m.month})<br>
+    👩‍⚕️${m.nurse}
+    </div>`;
+  });
+  monthlyList.innerHTML=html;
+}
+
+// 一覧
+function renderList(){
+  let html="";
+  dailyData.forEach((d,i)=>{
+    html+=`
+    <div class="card ${d.priority}">
+    ${d.name} (${d.date})<br>
+    🕒${d.savedAt}<br>
+    <button onclick="deleteDaily(${i})">削除</button>
+    </div>`;
+  });
+  list.innerHTML=html;
+}
+
+function deleteDaily(i){
+  dailyData.splice(i,1);
+  localStorage.setItem("dailyData",JSON.stringify(dailyData));
+  renderList();
+}
+
+// チェック
+function renderCheck(){
+  let name=c_name.value;
+  let month=c_month.value;
+  let key=`${name}_${month}`;
+  let saved=JSON.parse(localStorage.getItem("dayCheck"))||{};
+  let checked=saved[key]||[];
+
+  let html="";
+  for(let i=1;i<=31;i++){
+    let isChecked=checked.includes(i)?"checked":"";
+    html+=`
+    <label class="dayBox">
+    <input type="checkbox" ${isChecked}
+    onclick="goDaily('${name}','${month}',${i})">
+    ${i}
+    </label>`;
+  }
+  checkList.innerHTML=html;
+}
+
+// 🔥チェック→日次移動
+function goDaily(name,month,day){
+  showTab("daily");
+
+  d_name.value=name;
+  d_date.value=`${month}-${String(day).padStart(2,"0")}`;
+}
+
+// 統計
+function renderStats(){
+  let stats={};
+
+  dailyData.forEach(d=>{
+    if(!stats[d.name]){
+      stats[d.name]={total:0,miss:0};
+    }
+    stats[d.name].total++;
+
+    if(!d.contacted || !d.confirmed){
+      stats[d.name].miss++;
+    }
+  });
+
+  let html="";
+  for(let n in stats){
+    html+=`
+    <div class="card">
+    ${n}<br>
+    件数:${stats[n].total}<br>
+    漏れ:${stats[n].miss}
+    </div>`;
+  }
+
+  document.getElementById("stats").innerHTML=html;
+}
+</script>
+
+</body>
+</html>
